@@ -8,7 +8,7 @@ import numpy as np
 
 
 
-image_path = "C:\\Ekain\\CTS20DA02\\S080\\20EKIB03_CTS20DA02_S080Z07.jpg"  # ruta de la imagen de prueba
+image_path = "C:\\image.jpg"  # ruta de la imagen de prueba
 
 def ransac_line_from_mask(mask):
     # Extract edge points
@@ -80,15 +80,10 @@ def draw_paralel(img, slope, intercept,h1, color=(0,0,255)):
 def process_image_with_unet(image_path):
     pixelratio=1/127.8457   #   mm/pixel  relacion de píxeles a mm
 
-
-
-
-
     image_name= image_path.split("\\")[-1]
 
-
     model = smp.Unet(                                   # modelo UNet con encoder ResNet34 preentrenado en ImageNet
-    encoder_name="efficientnet-b3",
+    encoder_name="efficientnet-b0",
     encoder_weights=None,
     in_channels=3,      
     classes=1,
@@ -97,11 +92,6 @@ def process_image_with_unet(image_path):
     model.eval()
 
 
-
-    
-
-
-    
 
     with torch.no_grad():
         input_image = preprocess_image(image_path)
@@ -120,16 +110,6 @@ def process_image_with_unet(image_path):
     binary_mask= (predicted_mask > 0.5).astype(np.uint8)
     y,x= np.where(binary_mask==1)
     mask_coords=np.column_stack((x,y))
-
-
-
-
-
-    
-
-
-    
-
 
     ##linea con transformada de hough        
     edges= cv2.Canny((predicted_mask > 0.5).astype(np.uint8)*255, 50,150, apertureSize=3) # detección de bordes con Canny
@@ -154,32 +134,6 @@ def process_image_with_unet(image_path):
     # cv2.destroyAllWindows()
     
     slope, intercept, inliers = ransac_line_from_mask(mask_bottom)
-
-    """ lines= cv2.HoughLines(mask_bottom,1,np.pi/180,100) ## detección de líneas con transformada de Hough
-    if lines is not None:
-    rho, theta= lines[0][0]
-    a= np.cos(theta)
-    b= np.sin(theta)
-    x0= a*rho
-    y0= b*rho
-    pt1= (int(x0 +2000*(-b)), int(y0 +2000*(a)))
-    pt2= (int(x0 -2000*(-b)), int(y0 -2000*(a)))
-    else:
-    print("No se detectó ninguna línea con la transformada de Hough.")
-    ymin_contour=[]                       #coordenadas de contorno inferior(y min en cada x)
-    x_axis=np.unique(x)
-    for xi in x_axis:
-        y_min= np.max(y[x==xi])
-        ymin_contour.append([xi, y_min])
-    ymin_contour= np.array(ymin_contour)
-    ## mostrar resultados
-    line=cv2.fitLine(ymin_contour, cv2.DIST_L2,0,0.01,0.01)    #linea usando fitline
-    vx, vy, x0, y0= line.flatten()                 #vx y vy verctores de direccion/  a y b son vectores normales
-    b=vx
-    a=-vy
-    pt1= (int(x0 +2000*(-b)), int(y0 +2000*(a)))
-    pt2= (int(x0 -2000*(-b)), int(y0 -2000*(a)))  
-     """
 
 
 
@@ -263,12 +217,6 @@ def process_image_with_unet(image_path):
     min_h = Q1 - 1.5* IQR  
     max_h = Q3 + 1.5* IQR
 
-    """ mean_height = np.mean(heights_array)
-    std_height = np.std(heights_array)
-    z_scores = (heights_array - mean_height) / std_height
-    min_h = mean_height - 2 * std_height
-    max_h = mean_height + 2 * std_height """
-        
 
     filtered_heights = []
     for h in heights:
@@ -351,8 +299,7 @@ def process_image_with_unet(image_path):
 
 
 
-    #mostrar línea paralela en el punto más bajo de la máscara
-    #cv2.line(overlay, point01, point02, (255,255,0), 1)
+
 
     ## MOSTRAR LINEA DE HOUGH EN IMAGEN
     line_image= cv2.cvtColor((predicted_mask > 0.5).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)   
