@@ -14,15 +14,15 @@ import random
 
 # RUTAS
 
-train_images = "C:\\Ekain\\data\\22022026_dataset\\images_data"  # cargar imágenes de entrenamiento
-train_masks = "C:\\Ekain\\data\\22022026_dataset\\Train_Msk"   # cargar máscaras de entrenamiento  
-val_images = "C:\\Ekain\\data\\22022026_dataset\\img_val"   # cargar imágenes de validación
-val_masks = "C:\\Ekain\\data\\22022026_dataset\\Val_Msk"  # cargar máscaras de validación      
+train_images = "C:\\data\\train_images"  # cargar imágenes de entrenamiento
+train_masks = "C:\\data\\train_masks"   # cargar máscaras de entrenamiento  
+val_images = "C:\\data\\val_images"   # cargar imágenes de validación
+val_masks = "C:\\data\\Val_masks"  # cargar máscaras de validación      
 
 
 #CONFIGURACION 
 
-ENCODER_NAME = "efficientnet-b7"  # encoder preentrenado
+ENCODER_NAME = "efficientnet-b0"  # encoder preentrenado
 ENCODER_WEIGHTS = "imagenet"  # pesos preentrenados en ImageNet
 BATCH_SIZE = 6
 NUM_WORKERS = 4
@@ -39,7 +39,9 @@ CSV_FILE = "two_phase2.csv"
 BEST_CKPT = "best_two_phase2.pth"
 FINAL_CKPT = "final_two_phase2.pth"
 
+#
 # SEEDS
+#
 
 # Se establece un semilla para la reproducibilidad del entrenamiento
 SEED = 42
@@ -56,7 +58,7 @@ torch.backends.cudnn.benchmark = False
 #
 
 
-# data augmentation y formto para el entrenamiento
+# data augmentation y formato para el entrenamiento
 train_transform = A.Compose([
     A.RandomCrop(width=512, height=512),
     A.HorizontalFlip(p=0.5),
@@ -130,6 +132,7 @@ class Dataset(torch.utils.data.Dataset):
 # 
 # FUNCION DE PERDIDA
 # 
+
 dice_loss = smp.losses.DiceLoss(mode='binary')
 bceloss = smp.losses.SoftBCEWithLogitsLoss()
 
@@ -140,6 +143,7 @@ def loss_fn(outputs, targets):
 # 
 # VALIDACION
 # 
+
 def validate(model, val_loader, device):
     model.eval()
     val_loss = 0
@@ -180,6 +184,7 @@ def validate(model, val_loader, device):
 # 
 # MAIN
 # 
+
 def main():
     # ── PATHS ──
     image_paths = sorted(glob.glob(os.path.join(train_images, "*.*")))
@@ -237,6 +242,7 @@ def main():
     # 
     # Fase 1 - Entrenamiento con encoder congelado
     # 
+   
     for epoch in range(num_epochs_frozen):
         global_epoch += 1
         model.train()
@@ -303,6 +309,7 @@ def main():
     # 
     # Fase 2 - Descongelar encoder y continuar entrenamiento
     # 
+    
     for param in model.parameters():
         param.requires_grad = True
 
