@@ -8,7 +8,7 @@ import numpy as np
 
 
 
-image_path = "C:\\image.jpg"  # ruta de la imagen de prueba
+image_path = "C:\\Ekain\\CTS20DA02\\S080\\20EKIB03_CTS20DA02_S080Z07.jpg"  # ruta de la imagen de prueba
 
 def ransac_line_from_mask(mask):
     # Extract edge points
@@ -80,18 +80,28 @@ def draw_paralel(img, slope, intercept,h1, color=(0,0,255)):
 def process_image_with_unet(image_path):
     pixelratio=1/127.8457   #   mm/pixel  relacion de píxeles a mm
 
+
+
+
+
     image_name= image_path.split("\\")[-1]
 
+
     model = smp.Unet(                                   # modelo UNet con encoder ResNet34 preentrenado en ImageNet
-    encoder_name="efficientnet-b0",
+    encoder_name="efficientnet-b4",
     encoder_weights=None,
     in_channels=3,      
     classes=1,
     )
-    model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\\TFG\\best_unet1902.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
+    model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\\TFG\\best_two_phase_claude_v2.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
     model.eval()
 
 
+
+    
+
+
+    
 
     with torch.no_grad():
         input_image = preprocess_image(image_path)
@@ -110,8 +120,7 @@ def process_image_with_unet(image_path):
     binary_mask= (predicted_mask > 0.5).astype(np.uint8)
     y,x= np.where(binary_mask==1)
     mask_coords=np.column_stack((x,y))
-
-    ##linea con transformada de hough        
+        
     edges= cv2.Canny((predicted_mask > 0.5).astype(np.uint8)*255, 50,150, apertureSize=3) # detección de bordes con Canny
  #usar bordes inferiores a la máscara
     h, w = edges.shape
@@ -128,12 +137,35 @@ def process_image_with_unet(image_path):
             y_bottom = ys.max()  # el punto más bajo
             mask_bottom[y_bottom, x] = 255  # dibujarlo en la nueva máscara
 
-    # Opcional: mostrar resultado
-    # cv2.imshow("Borde inferior", mask_bottom)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+   
     
     slope, intercept, inliers = ransac_line_from_mask(mask_bottom)
+
+    """ lines= cv2.HoughLines(mask_bottom,1,np.pi/180,100) ## detección de líneas con transformada de Hough
+    if lines is not None:
+    rho, theta= lines[0][0]
+    a= np.cos(theta)
+    b= np.sin(theta)
+    x0= a*rho
+    y0= b*rho
+    pt1= (int(x0 +2000*(-b)), int(y0 +2000*(a)))
+    pt2= (int(x0 -2000*(-b)), int(y0 -2000*(a)))
+    else:
+    print("No se detectó ninguna línea con la transformada de Hough.")
+    ymin_contour=[]                       #coordenadas de contorno inferior(y min en cada x)
+    x_axis=np.unique(x)
+    for xi in x_axis:
+        y_min= np.max(y[x==xi])
+        ymin_contour.append([xi, y_min])
+    ymin_contour= np.array(ymin_contour)
+    ## mostrar resultados
+    line=cv2.fitLine(ymin_contour, cv2.DIST_L2,0,0.01,0.01)    #linea usando fitline
+    vx, vy, x0, y0= line.flatten()                 #vx y vy verctores de direccion/  a y b son vectores normales
+    b=vx
+    a=-vy
+    pt1= (int(x0 +2000*(-b)), int(y0 +2000*(a)))
+    pt2= (int(x0 -2000*(-b)), int(y0 -2000*(a)))  
+     """
 
 
 
@@ -187,22 +219,6 @@ def process_image_with_unet(image_path):
                 max_nor_dis_line= nor_dis_line
                 max_nor_dis_line_pos= b
 
-    #guardar heights en un archivo
-    """ with open("C:\\Ekain\\data\\images1\\results\\" + image_name + "_heights_hough_final.txt", "w") as f:
-    for h in heights:
-        f.write(f"{h[0]}, {h[1]}\n")
- """
-    ##dibujar línea de la línea paralela en el punto más bajo de la máscara
-    max_nor_dis_coords= normal_coords[(tangent_coords >= max_nor_dis_line_pos) & (tangent_coords < max_nor_dis_line_pos + bin_width)]
-
-
-
-    max_nor_dis_max= np.min(max_nor_dis_coords)
-    point01= (pt0 + line_dir * max_nor_dis_line_pos).astype(int)
-    point02= (pt0 + line_dir * max_nor_dis_line_pos + line_normal * max_nor_dis_max).astype(int)
-
-
-
 
 
 
@@ -217,6 +233,8 @@ def process_image_with_unet(image_path):
     min_h = Q1 - 1.5* IQR  
     max_h = Q3 + 1.5* IQR
 
+
+        
 
     filtered_heights = []
     for h in heights:
@@ -251,12 +269,6 @@ def process_image_with_unet(image_path):
     notch_areamm2= notch_area * (pixelratio*pixelratio)
 
 
-
-
-
-
-
-
     ## Medidas finales de desgaste ##
     Vbmax_px= max([h[1] for h in filtered_heights])    # altura máxima de desgaste en píxeles
     Vbavg_px= sum([h[1] for h in filtered_heights]) / len(filtered_heights)   # altura media de desgaste en píxeles
@@ -267,15 +279,6 @@ def process_image_with_unet(image_path):
     mask_area= np.sum(binary_mask)
     mask_areamm2= mask_area * (pixelratio**2)
 
-
-
-    #mostrar espacio de hough
-    hough_space= np.zeros((180, int(np.sqrt(edges.shape[0]**2 + edges.shape[1]**2))), dtype=np.uint8)
-    for i in range(edges.shape[0]):
-        for j in range(edges.shape[1]):
-            if edges[i,j]:
-                for theta in range(180):
-                    rho= int(j * np.cos(theta * np.pi /180) + i * np.sin(theta * np.pi /180))
                 
     line_normal_unit = line_normal / np.linalg.norm(line_normal)
     offset_min = line_normal_unit * min_h
@@ -299,18 +302,19 @@ def process_image_with_unet(image_path):
 
 
 
+    #mostrar línea paralela en el punto más bajo de la máscara
 
 
-    ## MOSTRAR LINEA DE HOUGH EN IMAGEN
-    line_image= cv2.cvtColor((predicted_mask > 0.5).astype(np.uint8)*255, cv2.COLOR_GRAY2BGR)   
+    ## MOSTRAR LINEA RANSAC EN IMAGEN
+   
 
 
-    #cv2.line(overlay, point_min1, (point_min1[0], point_min1[1]-200), (255,0,255), 1)
-    #cv2.line(overlay, point_max1, (point_max1[0], point_max1[1]-200), (255,0,255), 1)
+    cv2.line(overlay, point_min1, (point_min1[0], point_min1[1]-200), (255,0,255), 1)
+    cv2.line(overlay, point_max1, (point_max1[0], point_max1[1]-200), (255,0,255), 1)
 
-    #overlay = draw_ransac_line(overlay, slope, intercept, color=(255,0,255))
-    # overlay = draw_paralel(overlay, slope, intercept, max_h, color=(100,0,255))
-    # overlay = draw_paralel(overlay, slope, intercept, min_h, color=(255,0,100)) 
+    overlay = draw_ransac_line(overlay, slope, intercept, color=(255,0,255))
+    #overlay = draw_paralel(overlay, slope, intercept, offset_max, color=(100,0,255))
+    #overlay = draw_paralel(overlay, slope, intercept, offset_min, color=(255,0,100)) 
     ## MOSTRAR RESULTADOS CUADRO DE TEXTO##
 
     cv2.rectangle(overlay, (10,10), (750,130), (211,211,211), -1)
@@ -326,16 +330,17 @@ def process_image_with_unet(image_path):
 
 
     # Guardar imágenes de resultados
-    cv2.imwrite("C:\\Ekain\\data\\images1\\results\\" + image_name + "_overlay_hough_final.jpg", overlay)
-    cv2.imwrite("C:\\Ekain\\data\\images1\\results\\" + image_name + "_mask_hough_final.jpg", mask_image)
-    cv2.imwrite("C:\\Ekain\\data\\images1\\results\\" + image_name + "_line_hough_final.jpg", line_image)
-    cv2.imwrite("C:\\Ekain\\data\\images1\\results\\" + image_name + "_hough_space_final.jpg", hough_space)
+    cv2.imwrite("C:\\Ekain\\data\\images1\\results\\" + image_name + "_overlay_final.jpg", overlay)
+
 
     ## Mostrar imágenes de resultados
-    # cv2.imshow("Hough Line", line_image)
-    # cv2.imshow("Overlay", overlay)
-    # cv2.imshow("Predicted Mask", mask_image) 
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    
+    cv2.imshow("Overlay", overlay)
+    cv2.imshow("Predicted Mask", mask_image) 
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     return Vbmax_mm, Vbavg_mm, mask_area, notch_area, mask_image, overlay
+
+if __name__ == "__main__":
+    process_image_with_unet(image_path)
