@@ -8,7 +8,7 @@ import numpy as np
 
 
 
-image_path = "C:\\Ekain\\CTS20DA02\\S080\\20EKIB03_CTS20DA02_S080Z07.jpg"  # ruta de la imagen de prueba
+image_path = "C:\\Ekain\\CTS20DA02\\S035\\20EKIB03_CTS20DA02_S035Z05.jpg"  # ruta de la imagen de prueba
 
 def ransac_line_from_mask(mask):
     # Extract edge points
@@ -93,7 +93,7 @@ def process_image_with_unet(image_path):
     in_channels=3,      
     classes=1,
     )
-    model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\\TFG\\best_two_phase_claude_v2.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
+    model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\TFG\\best_two_phase__v2.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
     model.eval()
 
 
