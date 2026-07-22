@@ -98,10 +98,10 @@ Con **Albumentations**: recorte aleatorio 512×512, *flips* horizontal/vertical,
 |---|---|
 | `best_model.pth` | Pesos del **mejor modelo** (mayor Dice en validación) |
 | `final_model.pth` | Pesos del modelo al **finalizar** el entrenamiento |
-| `two_TFG3.csv` | Registro por época (Dice, IoU, accuracy, precision, pérdidas) |
-| `best_two_TFG3_metrics.csv` | Métricas finales del mejor checkpoint |
+| `Train.csv` | Registro por época (Dice, IoU, accuracy, precision, pérdidas) |
+| `best_metrics.csv` | Métricas finales del mejor checkpoint |
 
-### 2. Inferencia y medición — `Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py`
+### 2. Inferencia y medición — `UnetVbFN.py`
 
 Ajusta la ruta de la imagen de prueba y la del checkpoint entrenado:
 
@@ -113,7 +113,7 @@ model.load_state_dict(torch.load(".../best_two_TFG3.pth", map_location="cpu"))
 Ejecución:
 
 ```bash
-python Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py
+python UnetVbFN.py
 ```
 
 #### Pipeline de medición
