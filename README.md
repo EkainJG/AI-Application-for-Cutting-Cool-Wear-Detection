@@ -106,8 +106,8 @@ Con **Albumentations**: recorte aleatorio 512×512, *flips* horizontal/vertical,
 Ajusta la ruta de la imagen de prueba y la del checkpoint entrenado:
 
 ```python
-image_path = ".../mi_imagen.jpg"
-model.load_state_dict(torch.load(".../best_two_TFG3.pth", map_location="cpu"))
+image_path = ".../images1.jpg"
+model.load_state_dict(torch.load(".../best_model.pth", map_location="cpu"))
 ```
 
 Ejecución:
@@ -145,11 +145,6 @@ La conversión de píxeles a milímetros se controla con el parámetro `pixelrat
 - **Arquitectura:** U-Net (`segmentation_models_pytorch`).
 - **Encoder:** EfficientNet-B0, pesos preentrenados en ImageNet.
 - **Salida:** máscara binaria de 1 canal (1 = desgaste, 0 = fondo).
-
-> Se recomienda mantener **el mismo encoder en entrenamiento e inferencia**. Comprueba también
-> que el nombre del checkpoint que carga el script de inferencia coincide con el que genera el
-> entrenamiento (actualmente el script de medición carga `best_two_TFG2.pth`, mientras que el de
-> entrenamiento produce `best_two_TFG3.pth`).
 
 ---
 
