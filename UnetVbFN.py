@@ -9,7 +9,7 @@ import numpy as np
 
 
 
-image_path = "C:\\Ekain\\data\\images1\\20EKIB03_CTS20DA02_S030Z16.jpg"  # ruta de la imagen de prueba
+image_path = "C:\\images1.jpg"  # ruta de la imagen de prueba
 
 def ransac_line_from_mask(mask):
         
@@ -106,7 +106,7 @@ def process_image_with_unet(image_path,pixelratio=1/128.4758):
     classes=1,
     )
     # model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\TFG\\best_two_phase__v2.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
-    model.load_state_dict(torch.load("C:\\Industria_Teknologia\\Gradua\\TFG\\Unet\\best_two_TFG2.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
+    model.load_state_dict(torch.load("C:\\best_model.pth", map_location=torch.device('cpu'))) # cargar pesos entrenados
    
     model.eval()
 
