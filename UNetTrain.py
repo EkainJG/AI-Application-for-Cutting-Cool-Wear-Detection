@@ -1,3 +1,26 @@
+# -----------------------------------------------------------------------------
+# UNetTrain.py — Script de Entrenamiento: Segmentación de Desgaste con U-Net
+# -----------------------------------------------------------------------------
+# Propósito:
+# 
+#   Entrenar un modelo U-Net
+#   para segmentación semántica BINARIA de zonas de desgaste en
+#   herramientas de brochado. Salida: máscara de un solo canal donde
+#   1 = zona de desgaste, 0 = fondo.
+#
+# Estrategia de entrenamiento en DOS FASES:
+
+#   Fase 1 ─ Encoder CONGELADO
+#   Solo se actualizan decoder + segmentation head. El encoder mantiene   
+#   sus features de ImageNet intactas. Convergencia rápida y estable.     
+#   
+#   Fase 2 ─ Fine-Tuning COMPLETO 
+#   Se descongelan todos los parámetros con LRs diferenciados:            
+#   encoder (LR muy bajo) para no "olvidar" ImageNet; decoder y head      
+#   (LR normal) para continuar especializándose en desgaste.              
+#   
+# -----------------------------------------------------------------------------
+
 import csv
 import cv2
 import segmentation_models_pytorch as smp
@@ -11,17 +34,24 @@ import numpy as np
 import random
 
 
-
+# 
 # RUTAS
+# 
+
+# Se establecen la rutas de las imágenes y máscaras para entrenamiento y validación
+# Las imagenes deben estar en formato RGB y las máscaras en escala de grises (0-255), donde 255 indica desgaste y 0 fondo.
+# Las imagenes y msacaras deben de estar ordenadas de forma que correspondan entre sí (ej. img_001.jpg con msk_001.png)
 
 train_images = "C:\\Ekain\\data\\22022026_dataset\\images_data"  # cargar imágenes de entrenamiento
 train_masks = "C:\\Ekain\\data\\22022026_dataset\\Train_Msk"   # cargar máscaras de entrenamiento  
 val_images = "C:\\Ekain\\data\\22022026_dataset\\img_val"   # cargar imágenes de validación
 val_masks = "C:\\Ekain\\data\\22022026_dataset\\Val_Msk"  # cargar máscaras de validación      
 
+#
+#CONFIGURACION
+#
 
-#CONFIGURACION 
-
+# Hiperparámetros y configuraciones generales para el entrenamiento
 ENCODER_NAME = "efficientnet-b0"  # encoder preentrenado
 ENCODER_WEIGHTS = "imagenet"  # pesos preentrenados en ImageNet
 BATCH_SIZE = 6
@@ -32,12 +62,12 @@ PATIENCE = 16
 FROZEN_LR = 1e-4
 ENCODER_LR = 1e-5
 DECODER_LR = 1e-4
-SEGMENTATION_HEAD_LR = 1e-4
-WEIGHT_DECAY = 1e-4
-WARMUP_EPOCHS = 3          # encoder LR warmup after unfreeze
-CSV_FILE = "two_phase2.csv"
-BEST_CKPT = "best_two_phase2.pth"
-FINAL_CKPT = "final_two_phase2.pth"
+SEGMENTATIONHEAD_LR = 1e-4
+WEIGHT_DECAY = 1e-4         
+CSV_FILE = "two_TFG3.csv"
+BEST_CKPT = "best_two_TFG3.pth"
+FINAL_CKPT = "final_two_TFG3.pth"
+BEST_METRICS_CSV = "best_two_TFG3_metrics.csv"
 
 # SEEDS
 
@@ -145,13 +175,15 @@ def validate(model, val_loader, device):
     val_loss = 0
     dice_list = []
     iou_list = []
+    acc_list = []
+    precision_list = []
 
     with torch.no_grad():
         for val_images, val_masks in val_loader:
             val_images = val_images.to(device)
             val_masks = val_masks.to(device)
 
-            
+
             val_outputs = model(val_images)
             v_loss = loss_fn(val_outputs, val_masks)
 
@@ -165,11 +197,15 @@ def validate(model, val_loader, device):
             tp, fp, fn, tn = smp.metrics.get_stats(pred_masks, truth_masks, mode="binary")
             iou_list.append(smp.metrics.functional.iou_score(tp, fp, fn, tn, reduction="none").mean().item())
             dice_list.append(smp.metrics.functional.f1_score(tp, fp, fn, tn, reduction="none").mean().item())
+            acc_list.append(smp.metrics.functional.accuracy(tp, fp, fn, tn, reduction="none").mean().item())
+            precision_list.append(smp.metrics.functional.precision(tp, fp, fn, tn, reduction="none").mean().item())
 
     val_loss /= len(val_loader)
     dice_mean = np.mean(dice_list)
     iou_mean = np.mean(iou_list)
-    return val_loss, dice_mean, iou_mean
+    acc_mean = np.mean(acc_list)
+    precision_mean = np.mean(precision_list)
+    return val_loss, dice_mean, iou_mean, acc_mean, precision_mean
 
 
 # 
@@ -182,13 +218,14 @@ def main():
     val_image_paths = sorted(glob.glob(os.path.join(val_images, "*.*")))
     val_mask_paths = sorted(glob.glob(os.path.join(val_masks, "*.*")))
 
-    
+    print(f"Training images: {len(image_paths)}, Training masks: {len(mask_paths)}")
     # ── Modelo ──
     model = smp.Unet(
         encoder_name=ENCODER_NAME,
         encoder_weights=ENCODER_WEIGHTS,
         in_channels=3,
         classes=1,
+        decoder_use_norm=True,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -219,7 +256,7 @@ def main():
         lr=FROZEN_LR, weight_decay=WEIGHT_DECAY,
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5, factor=0.5, min_lr=1e-6)
-    scaler = torch.amp.GradScaler("cuda")
+
 
     # Configuración
     num_epochs_frozen = NUM_EPOCHS_FROZEN
@@ -255,7 +292,7 @@ def main():
         print(f"[Frozen] Epoch {global_epoch} - Loss: {epoch_mean_loss:.4f}")
 
         #  Validacion
-        val_loss, dice_mean, iou_mean = validate(model, val_loader, device)
+        val_loss, dice_mean, iou_mean, acc_mean, precision_mean = validate(model, val_loader, device)
         current_lr = optimizer.param_groups[0]['lr']
         scheduler.step(dice_mean)
 
@@ -266,6 +303,8 @@ def main():
                 global_epoch,
                 f"{dice_mean:.6f}".replace('.', ','),
                 f"{iou_mean:.6f}".replace('.', ','),
+                f"{acc_mean:.6f}".replace('.', ','),
+                f"{precision_mean:.6f}".replace('.', ','),
                 f"{val_loss:.6f}".replace('.', ','),
                 f"{epoch_mean_loss:.6f}".replace('.', ','),
             ])
@@ -294,7 +333,7 @@ def main():
     optimizer = torch.optim.AdamW([
         {'params': model.encoder.parameters(),          'lr': ENCODER_LR},
         {'params': model.decoder.parameters(),          'lr': DECODER_LR},
-        {'params': model.segmentation_head.parameters(),'lr': SEGMENTATION_HEAD_LR},
+        {'params': model.segmentation_head.parameters(),'lr': SEGMENTATIONHEAD_LR},
     ], weight_decay=WEIGHT_DECAY)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5, factor=0.5, min_lr=1e-6)
@@ -324,7 +363,7 @@ def main():
         print(f"[Unfrozen] Epoch {global_epoch} - Loss: {epoch_mean_loss:.4f}")
 
         # Validacion
-        val_loss, dice_mean, iou_mean = validate(model, val_loader, device)
+        val_loss, dice_mean, iou_mean, acc_mean, precision_mean = validate(model, val_loader, device)
         encoder_lr = optimizer.param_groups[0]['lr']
         decoder_lr = optimizer.param_groups[1]['lr']
         scheduler.step(dice_mean)
@@ -336,11 +375,13 @@ def main():
                 global_epoch,
                 f"{dice_mean:.6f}".replace('.', ','),
                 f"{iou_mean:.6f}".replace('.', ','),
+                f"{acc_mean:.6f}".replace('.', ','),
+                f"{precision_mean:.6f}".replace('.', ','),
                 f"{val_loss:.6f}".replace('.', ','),
                 f"{epoch_mean_loss:.6f}".replace('.', ','),
             ])
 
-        print(f"LRe: {encoder_lr:.6f} - LRd: {decoder_lr:.6f} - Vdice: {dice_mean:.4f} - Viou: {iou_mean:.4f} - Vloss: {val_loss:.4f}")
+        print(f"LRe: {encoder_lr:.6f} - LRd: {decoder_lr:.6f} - Vdice: {dice_mean:.4f} - Viou: {iou_mean:.4f} - Vacc: {acc_mean:.4f} - Vprec: {precision_mean:.4f} - Vloss: {val_loss:.4f}")
 
         # ── Guardar mejor modelo basado en métrica de validación (dice)
         if dice_mean > best_val_metric:
@@ -356,6 +397,21 @@ def main():
             break
 
     torch.save(model.state_dict(), FINAL_CKPT)
+
+    # ── Métricas finales del mejor modelo guardado ──
+    model.load_state_dict(torch.load(BEST_CKPT, map_location=device))
+    _, best_dice, best_iou, best_acc, best_precision = validate(model, val_loader, device)
+    with open(BEST_METRICS_CSV, mode='w', newline='') as file:
+        writer = csv.writer(file, delimiter=';')
+        writer.writerow(["checkpoint", "iou", "dice", "accuracy", "precision"])
+        writer.writerow([
+            BEST_CKPT,
+            f"{best_iou:.6f}".replace('.', ','),
+            f"{best_dice:.6f}".replace('.', ','),
+            f"{best_acc:.6f}".replace('.', ','),
+            f"{best_precision:.6f}".replace('.', ','),
+        ])
+
     print("Done!")
 
 
