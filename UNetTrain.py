@@ -42,10 +42,10 @@ import random
 # Las imagenes deben estar en formato RGB y las máscaras en escala de grises (0-255), donde 255 indica desgaste y 0 fondo.
 # Las imagenes y msacaras deben de estar ordenadas de forma que correspondan entre sí (ej. img_001.jpg con msk_001.png)
 
-train_images = "C:\\Ekain\\data\\22022026_dataset\\images_data"  # cargar imágenes de entrenamiento
-train_masks = "C:\\Ekain\\data\\22022026_dataset\\Train_Msk"   # cargar máscaras de entrenamiento  
-val_images = "C:\\Ekain\\data\\22022026_dataset\\img_val"   # cargar imágenes de validación
-val_masks = "C:\\Ekain\\data\\22022026_dataset\\Val_Msk"  # cargar máscaras de validación      
+train_images = "C:\\Train_Img"  # cargar imágenes de entrenamiento
+train_masks = "C:\\Train_Msk"   # cargar máscaras de entrenamiento  
+val_images = "C:\\Val_Img"   # cargar imágenes de validación
+val_masks = "C:\\Val_Msk"  # cargar máscaras de validación      
 
 #
 #CONFIGURACION
@@ -64,10 +64,10 @@ ENCODER_LR = 1e-5
 DECODER_LR = 1e-4
 SEGMENTATIONHEAD_LR = 1e-4
 WEIGHT_DECAY = 1e-4         
-CSV_FILE = "two_TFG3.csv"
-BEST_CKPT = "best_two_TFG3.pth"
-FINAL_CKPT = "final_two_TFG3.pth"
-BEST_METRICS_CSV = "best_two_TFG3_metrics.csv"
+CSV_FILE = "Train.csv"
+BEST_CKPT = "best_model.pth"
+FINAL_CKPT = "final_model.pth"
+BEST_METRICS_CSV = "best_metrics.csv"
 
 # SEEDS
 
