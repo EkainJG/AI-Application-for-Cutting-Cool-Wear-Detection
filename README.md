@@ -1,82 +1,185 @@
-# AI Application for Cutting Cool Wear Detection
+# Detección y medición automática del desgaste en herramientas de brochado mediante Deep Learning
 
-AI Application for Cutting Cool Wear Detection is a Python project for training and using a U-Net model to perform binary semantic segmentation of cutting tool wear. It includes a training script for building the model and an inference script for estimating wear on new images and drawing measurement lines from the predicted mask.
+Trabajo de Fin de Grado (TFG) en Ingeniería en Tecnología Industrial, desarrollado en colaboración con el **CFAA — Centro de Fabricación Avanzada Aeronáutica** (Zamudio, Bizkaia).
 
-## Features
+El proyecto aborda la **detección y cuantificación automática del desgaste de flanco** en herramientas de brochado a partir de imágenes, sustituyendo la medición manual —lenta y subjetiva— por un flujo basado en **visión por computador** y **segmentación semántica con redes neuronales**. La medición del desgaste se realiza siguiendo los criterios de la norma **ISO 3685** (anchura de la banda de desgaste, *VB*).
 
-- Binary semantic segmentation of wear regions
-- U-Net model with an ImageNet-pretrained EfficientNet-B0 encoder
-- Two-stage training strategy:
-  - frozen encoder training
-  - full fine-tuning
-- Inference pipeline for new images
-- Mask post-processing and RANSAC-based line fitting for wear measurement
+El sistema se divide en dos etapas:
 
-## Repository structure
+1. **Segmentación** de la zona de desgaste con una red **U-Net** (encoder EfficientNet-B0 preentrenado en ImageNet).
+2. **Medición geométrica** del desgaste sobre la máscara predicha mediante ajuste robusto de la línea de referencia con **RANSAC** y proyección de los puntos de la máscara.
 
-- `UNetTrain.py` — training pipeline for the U-Net segmentation model
-- `UnetVbFN.py` — inference and measurement utilities
-- `Data/` — dataset and related project data
-- `best_two_TFG2.pth` — pre-trained model checkpoint
+---
 
-## Requirements
+## Estructura del repositorio
 
-This project uses Python and the following main libraries:
+```
+.
+├── UNetTrain.py                                   # Entrenamiento del modelo de segmentación
+├── Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py   # Inferencia + medición del desgaste (ISO 3685)
+├── README.md
+└── data/                                          # Dataset (no incluido / gestionado localmente)
+    ├── images_data/     # Imágenes de entrenamiento (RGB)
+    ├── Train_Msk/       # Máscaras de entrenamiento (escala de grises)
+    ├── img_val/         # Imágenes de validación (RGB)
+    └── Val_Msk/         # Máscaras de validación (escala de grises)
+```
 
-- `torch`
-- `segmentation_models_pytorch`
-- `albumentations`
-- `opencv-python`
-- `numpy`
-- `scikit-learn`
+> **Nota sobre el nombre del script de inferencia:** el fichero conserva un nombre heredado
+> (`...Resnet34_hough...`), pero la versión actual utiliza el encoder **EfficientNet-B0** y
+> **RANSAC** (no ResNet-34 ni la transformada de Hough). Se recomienda renombrarlo a algo como
+> `measure_wear.py` para mayor claridad.
 
-## Data preparation
+---
 
-The training script expects image and mask folders that are aligned by filename order. According to the code comments:
+## Dataset
 
-- Images should be RGB
-- Masks should be grayscale
-- White/255 pixels represent wear
-- Black/0 pixels represent background
+- **Imágenes:** formato RGB (`.jpg`).
+- **Máscaras:** escala de grises, donde **255 = zona de desgaste** y **0 = fondo**.
+- Cada imagen debe tener su máscara correspondiente, **ordenadas de forma que se emparejen** al listarlas alfabéticamente (p. ej. `img_001.jpg` ↔ `msk_001.png`).
+- Partición empleada: **120 imágenes de entrenamiento / 24 de validación** (144 en total).
 
-The current training script uses Windows-style example paths such as:
+En el `Dataset` de entrenamiento, las máscaras se binarizan con umbral (`mask > 127`) y se aplica una lógica de *ensure_positive* que reintenta el recorte aleatorio para evitar un exceso de parches vacíos (sin desgaste).
 
-- `C:\Train_Img`
-- `C:\Train_Msk`
-- `C:\Val_Img`
-- `C:\Val_Msk`
+---
 
-Update these paths before training.
+## Requisitos
 
-## Usage
+- Python 3.9+
+- GPU NVIDIA con CUDA (recomendado para el entrenamiento)
 
-### Training
+### Dependencias principales
 
-Edit the dataset paths in `UNetTrain.py`, then run:
+```
+torch
+torchvision
+segmentation-models-pytorch
+albumentations
+opencv-python
+numpy
+scikit-learn
+```
+
+Instalación rápida:
+
+```bash
+pip install torch torchvision segmentation-models-pytorch albumentations opencv-python numpy scikit-learn
+```
+
+---
+
+## Uso
+
+### 1. Entrenamiento — `UNetTrain.py`
+
+Antes de ejecutar, **ajusta las rutas** al inicio del script (actualmente apuntan a rutas locales de Windows):
+
+```python
+train_images = ".../images_data"
+train_masks  = ".../Train_Msk"
+val_images   = ".../img_val"
+val_masks    = ".../Val_Msk"
+```
+
+Ejecución:
 
 ```bash
 python UNetTrain.py
 ```
 
-### Inference
+#### Estrategia de entrenamiento en dos fases
 
-Edit the input image path in `UnetVbFN.py`, then run:
+El entrenamiento sigue un esquema de *transfer learning* en dos fases:
 
-```bash
-python UnetVbFN.py
+- **Fase 1 — Encoder congelado.** Solo se actualizan el *decoder* y la *segmentation head*. El encoder conserva intactas sus *features* de ImageNet, lo que permite una convergencia rápida y estable.
+- **Fase 2 — Fine-tuning completo.** Se descongela toda la red y se entrena con *learning rates* diferenciados: uno muy bajo para el encoder (para no degradar el conocimiento de ImageNet) y otros mayores para el decoder y la cabeza de segmentación.
+
+Se aplica *early stopping* sobre la métrica **Dice** de validación y un *scheduler* `ReduceLROnPlateau`.
+
+#### Función de pérdida y métricas
+
+- **Pérdida:** `DiceLoss` + `SoftBCEWithLogitsLoss`.
+- **Métricas de validación:** Dice (F1), IoU, *accuracy* y *precision*.
+
+#### Data augmentation
+
+Con **Albumentations**: recorte aleatorio 512×512, *flips* horizontal/vertical, rotaciones de 90°, y variaciones fotométricas (brillo/contraste, gamma, CLAHE, ruido gaussiano, desenfoque, *sharpen*, *hue/saturation*).
+
+#### Salidas del entrenamiento
+
+| Fichero | Contenido |
+|---|---|
+| `best_two_TFG3.pth` | Pesos del **mejor modelo** (mayor Dice en validación) |
+| `final_two_TFG3.pth` | Pesos del modelo al **finalizar** el entrenamiento |
+| `two_TFG3.csv` | Registro por época (Dice, IoU, accuracy, precision, pérdidas) |
+| `best_two_TFG3_metrics.csv` | Métricas finales del mejor checkpoint |
+
+### 2. Inferencia y medición — `Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py`
+
+Ajusta la ruta de la imagen de prueba y la del checkpoint entrenado:
+
+```python
+image_path = ".../mi_imagen.jpg"
+model.load_state_dict(torch.load(".../best_two_TFG3.pth", map_location="cpu"))
 ```
 
-## Notes
-
-- The repository currently does not include a `requirements.txt`, so you may need to install dependencies manually.
-- The scripts are written for a local Python environment and use absolute Windows paths that should be adapted to your machine.
-
-## Suggested installation
+Ejecución:
 
 ```bash
-pip install torch segmentation-models-pytorch albumentations opencv-python scikit-learn numpy
+python Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py
 ```
 
-## License
+#### Pipeline de medición
 
-No license file is currently included in the repository.
+1. **Segmentación** de la imagen con la U-Net y binarización de la máscara predicha.
+2. Selección del **componente conexo de mayor área** (descarta ruido de segmentación).
+3. Extracción del **borde inferior** de la máscara mediante detección de bordes (Canny).
+4. Ajuste de la **línea de referencia** al borde inferior con **RANSAC** (robusto frente a *outliers*).
+5. Proyección de los puntos de la máscara sobre las direcciones **normal** y **tangente** a la línea, y cálculo de la altura de desgaste por *bins* a lo largo de la tangente.
+6. **Filtrado de outliers** de las alturas mediante el criterio **IQR** (rango intercuartílico).
+7. Cálculo de las medidas de desgaste según **ISO 3685** y detección de **muescas/roturas** (*chipping*) por umbral.
+
+#### Calibración píxel → mm
+
+La conversión de píxeles a milímetros se controla con el parámetro `pixelratio` (por defecto `1/128.4758`, es decir, 128,4758 px/mm). **Debe recalibrarse** según la resolución y el montaje óptico de cada campaña de captura.
+
+#### Resultados que se calculan
+
+- **VBmax**: altura máxima de desgaste (px y mm).
+- **VBavg**: altura media de desgaste (px y mm).
+- **Área** de la zona de desgaste (px² y mm²).
+- **Área** y **número** de muescas/roturas (*chipping*).
+- Imagen *overlay* con la máscara (verde), las muescas (naranja), la línea RANSAC y las líneas de medición, junto a un cuadro de texto con los valores.
+
+---
+
+## Modelo
+
+- **Arquitectura:** U-Net (`segmentation_models_pytorch`).
+- **Encoder:** EfficientNet-B0, pesos preentrenados en ImageNet.
+- **Salida:** máscara binaria de 1 canal (1 = desgaste, 0 = fondo).
+
+> Se recomienda mantener **el mismo encoder en entrenamiento e inferencia**. Comprueba también
+> que el nombre del checkpoint que carga el script de inferencia coincide con el que genera el
+> entrenamiento (actualmente el script de medición carga `best_two_TFG2.pth`, mientras que el de
+> entrenamiento produce `best_two_TFG3.pth`).
+
+---
+
+## Reproducibilidad
+
+El entrenamiento fija una semilla (`SEED = 42`) para `random`, `numpy` y `torch`, y activa el modo determinista de cuDNN, de modo que las ejecuciones sean reproducibles.
+
+---
+
+## Notas y limitaciones
+
+- Las **rutas están codificadas** en los scripts (rutas absolutas de Windows). Conviene parametrizarlas (argumentos de línea de comandos o fichero de configuración) antes de compartir el repositorio.
+- El `pixelratio` es **específico del montaje de captura**; una calibración incorrecta invalida las medidas en mm.
+- El dataset no se incluye en el repositorio y debe colocarse en la estructura de carpetas descrita.
+
+---
+
+## Autoría
+
+TFG desarrollado en el marco del Grado en Ingeniería en Tecnología Industrial, en colaboración con el **CFAA (Centro de Fabricación Avanzada Aeronáutica)**, Zamudio (Bizkaia).
