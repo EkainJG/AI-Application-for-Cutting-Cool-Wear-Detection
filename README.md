@@ -19,17 +19,11 @@ El sistema se divide en dos etapas:
 ├── Unet_Resnet34_hough_finalRANSAC_FN_copy_2.py   # Inferencia + medición del desgaste (ISO 3685)
 ├── README.md
 └── data/                                          # Dataset (no incluido / gestionado localmente)
-    ├── images_data/     # Imágenes de entrenamiento (RGB)
+    ├── Train_Img/     # Imágenes de entrenamiento (RGB)
     ├── Train_Msk/       # Máscaras de entrenamiento (escala de grises)
-    ├── img_val/         # Imágenes de validación (RGB)
+    ├── Val_Img/         # Imágenes de validación (RGB)
     └── Val_Msk/         # Máscaras de validación (escala de grises)
 ```
-
-> **Nota sobre el nombre del script de inferencia:** el fichero conserva un nombre heredado
-> (`...Resnet34_hough...`), pero la versión actual utiliza el encoder **EfficientNet-B0** y
-> **RANSAC** (no ResNet-34 ni la transformada de Hough). Se recomienda renombrarlo a algo como
-> `measure_wear.py` para mayor claridad.
-
 ---
 
 ## Dataset
@@ -59,13 +53,6 @@ opencv-python
 numpy
 scikit-learn
 ```
-
-Instalación rápida:
-
-```bash
-pip install torch torchvision segmentation-models-pytorch albumentations opencv-python numpy scikit-learn
-```
-
 ---
 
 ## Uso
@@ -75,9 +62,9 @@ pip install torch torchvision segmentation-models-pytorch albumentations opencv-
 Antes de ejecutar, **ajusta las rutas** al inicio del script (actualmente apuntan a rutas locales de Windows):
 
 ```python
-train_images = ".../images_data"
+train_images = ".../Train_Img"
 train_masks  = ".../Train_Msk"
-val_images   = ".../img_val"
+val_images   = ".../Val_Img"
 val_masks    = ".../Val_Msk"
 ```
 
@@ -109,8 +96,8 @@ Con **Albumentations**: recorte aleatorio 512×512, *flips* horizontal/vertical,
 
 | Fichero | Contenido |
 |---|---|
-| `best_two_TFG3.pth` | Pesos del **mejor modelo** (mayor Dice en validación) |
-| `final_two_TFG3.pth` | Pesos del modelo al **finalizar** el entrenamiento |
+| `best_model.pth` | Pesos del **mejor modelo** (mayor Dice en validación) |
+| `final_model.pth` | Pesos del modelo al **finalizar** el entrenamiento |
 | `two_TFG3.csv` | Registro por época (Dice, IoU, accuracy, precision, pérdidas) |
 | `best_two_TFG3_metrics.csv` | Métricas finales del mejor checkpoint |
 
